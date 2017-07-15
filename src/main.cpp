@@ -26,44 +26,44 @@ using namespace std;
 
 
 
-void add_stream(AVStream *st, AVFormatContext *oc, AVCodec **codec, enum AVCodecID codec_id){
-    AVCodecContext *c;
-    //AVStream *st;
+int add_stream(AVStream *st, AVFormatContext *fmt_ctx, AVCodec **codec, enum AVCodecID codec_id){
+    int                 id = -1;
+    AVCodecContext      *codec_ctx;
 
-    /* find the encoder */
+    // find the encoder 
     *codec = avcodec_find_encoder(codec_id);
-    // avcodec_find_decoder
     if (!(*codec)) {
         fprintf(stderr, "Could not find encoder for '%s'\n", avcodec_get_name(codec_id));
-        exit(1);
+        return id;
     }
 
-    st = avformat_new_stream(oc, *codec);
+    // create new stream 
+    st = avformat_new_stream(fmt_ctx, *codec);
     if (!st) {
         fprintf(stderr, "Could not allocate stream\n");
-        exit(1);
+        return id;
     }
-    printf("add_stream codec_id:%d nb_streams:%ld\n", codec_id, oc->nb_streams);
-    st->id = oc->nb_streams-1;
-    c = st->codec;
+    // printf("add_stream codec_id:%d nb_streams:%ld\n", codec_id, fmt_ctx->nb_streams);
+    id = st->id = fmt_ctx->nb_streams-1;
+    codec_ctx = st->codec;
 
     switch ((*codec)->type) {
         case AVMEDIA_TYPE_AUDIO:
-            //c->sample_fmt   = AV_SAMPLE_FMT_FLTP;
-            c->sample_fmt   = AV_SAMPLE_FMT_S16P;
-            c->bit_rate     = 128000;
-            c->sample_rate  = 44100;
-            c->channels     = 2;
+          //codec_ctx->sample_fmt   = AV_SAMPLE_FMT_FLTP;
+            codec_ctx->sample_fmt   = AV_SAMPLE_FMT_S16P;
+            codec_ctx->bit_rate     = 128000;
+            codec_ctx->sample_rate  = 44100;
+            codec_ctx->channels     = 2;
             break;
             /*
              case AVMEDIA_TYPE_VIDEO:
-                 c->codec_id = codec_id;
+                 codec_ctx->codec_id = codec_id;
 
-                 c->bit_rate = 400000;
-                 c->time_base.den = STREAM_FRAME_RATE;
-                 c->time_base.num = 1;
-                 c->gop_size = 12;
-                 c->pix_fmt = STREAM_PIX_FMT;
+                 codec_ctx->bit_rate = 400000;
+                 codec_ctx->time_base.den = STREAM_FRAME_RATE;
+                 codec_ctx->time_base.num = 1;
+                 codec_ctx->gop_size = 12;
+                 codec_ctx->pix_fmt = STREAM_PIX_FMT;
                  break;
               */
         default:
@@ -71,10 +71,10 @@ void add_stream(AVStream *st, AVFormatContext *oc, AVCodec **codec, enum AVCodec
     }
 
     /* Some formats want stream headers to be separate. */
-    if (oc->oformat->flags & AVFMT_GLOBALHEADER)
-        c->flags |= CODEC_FLAG_GLOBAL_HEADER;
+    if (fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+        codec_ctx->flags |= CODEC_FLAG_GLOBAL_HEADER;
 
-    //return st;
+    return id;
 }
 
 
@@ -112,7 +112,7 @@ int main(int argc,char **argv) {
     // IN init  
     av_register_all();
     avformat_network_init();
-    //IN open file
+    // IN open file
     if (avformat_open_input(&in_fmt_ctx, input_file, NULL, NULL)!=0) {
         fprintf(stderr, "Could not open source file %s\n", input_file);
         exit(-1);
@@ -128,7 +128,7 @@ int main(int argc,char **argv) {
 #ifdef VIDEO_MODE
     video_idx = av_find_best_stream(in_fmt_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
     video_codec_ctx = in_fmt_ctx->streams[video_idx]->codec;
-    printf("video_stream AVMEDIA_TYPE_VIDEO:%p codec_id:%d\n", AVMEDIA_TYPE_VIDEO, video_codec_ctx->codec_id);
+    printf("video_stream AVMEDIA_TYPE_VIDEO:%p video_idx:%d codec_id:%d\n", AVMEDIA_TYPE_VIDEO, video_idx, video_codec_ctx->codec_id);
     video_codec = avcodec_find_decoder(video_codec_ctx->codec_id);
 #endif
 
@@ -136,7 +136,7 @@ int main(int argc,char **argv) {
     // IN find audio stream 
     audio_idx = av_find_best_stream(in_fmt_ctx, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
     audio_codec_ctx = in_fmt_ctx->streams[audio_idx]->codec;
-    printf("audio_stream AVMEDIA_TYPE_AUDIO:%d codec_id:%d\n", AVMEDIA_TYPE_AUDIO, audio_codec_ctx->codec_id);
+    printf("audio_stream AVMEDIA_TYPE_AUDIO:%d audio_idx:%d codec_id:%d\n", AVMEDIA_TYPE_AUDIO, audio_idx, audio_codec_ctx->codec_id);
     // IN find audio decoder codec
     audio_codec = avcodec_find_decoder(audio_codec_ctx->codec_id);
     if (audio_codec == NULL){
@@ -214,9 +214,10 @@ int main(int argc,char **argv) {
         exit(-1);
     }
 
+    int count = 0;
     while (!end_of_stream) {
         av_init_packet(&pkt);
-
+        
         if (av_read_frame(in_fmt_ctx, &pkt)<0) {
             end_of_stream = 1;
             av_packet_unref(&pkt);
@@ -224,17 +225,28 @@ int main(int argc,char **argv) {
 #ifdef AUDIO_MODE
         if (pkt.stream_index == audio_idx) {
             // write_audio_frame(out_fmt_ctx, out_audio_st);
-//            ret = av_interleaved_write_frame(out_fmt_ctx, &pkt);
+            /*  // 可输出文件
             pkt.stream_index = 0;
+            //ret = av_interleaved_write_frame(out_fmt_ctx, &pkt);
             ret = av_write_frame(out_fmt_ctx, &pkt);
             if (ret < 0){
                 fprintf(stderr, "Error while writing audio frame");
                 exit(1);
+            }*/ 
+            
+            // 开始解码 然后重新编码
+            avcodec_decode_audio4(audio_codec_ctx, frame, &got_audio_frame, &pkt);
+            printf("decode audio:%d time_base:%d pts:%ld\n", got_audio_frame, , frame->pts);
+            if (got_audio_frame) {
+                if (count++ >= 100 )
+                   break;
+                 
+                printf("##:src_ch_layout:%d src_nb_channels:%d src_nb_samples:%-4d src_sample_fmt:%d src_sample_rate:%d src_linesize:%d %d\n", audio_codec_ctx->channel_layout, audio_codec_ctx->channels, frame->nb_samples, audio_codec_ctx->sample_fmt, audio_codec_ctx->sample_rate, frame->linesize[0], frame->linesize[1]);
+                //int data_size = audio_resampling_ex(swr_ctx, audio_codec_ctx, frame, AV_SAMPLE_FMT_S16, 1, 16000, audio_outbuf);
+                //int data_size = audio_resampling_ex(swr_ctx, audio_codec_ctx, frame, AV_SAMPLE_FMT_S16P, 2, 44100, audio_outbuf);
             }
 
             /*
-            avcodec_decode_audio4(audio_codec_ctx, frame, &got_audio_frame, &pkt);
-
             if (got_audio_frame) {
                 printf("##:src_ch_layout:%d src_nb_channels:%d src_nb_samples:%-4d src_sample_fmt:%d src_sample_rate:%d src_linesize:%d %d\n", audio_codec_ctx->channel_layout, audio_codec_ctx->channels, frame->nb_samples, audio_codec_ctx->sample_fmt, audio_codec_ctx->sample_rate, frame->linesize[0], frame->linesize[1]);
                 //int data_size = audio_resampling_ex(swr_ctx, audio_codec_ctx, frame, AV_SAMPLE_FMT_S16, 1, 16000, audio_outbuf);
