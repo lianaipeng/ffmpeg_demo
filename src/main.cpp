@@ -236,7 +236,7 @@ int main(int argc,char **argv) {
             
             // 开始解码 然后重新编码
             avcodec_decode_audio4(audio_codec_ctx, frame, &got_audio_frame, &pkt);
-            printf("decode audio:%d time_base:%d pts:%ld\n", got_audio_frame, , frame->pts);
+            printf("decode audio:%d pts:%ld\n", got_audio_frame, frame->pts);
             if (got_audio_frame) {
                 if (count++ >= 100 )
                    break;
