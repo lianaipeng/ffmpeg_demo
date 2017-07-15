@@ -30,7 +30,6 @@ void add_stream(AVStream *st, AVFormatContext *oc, AVCodec **codec, enum AVCodec
     AVCodecContext *c;
     //AVStream *st;
 
-    printf("add_stream codec_id:%d\n", codec_id);
     /* find the encoder */
     *codec = avcodec_find_encoder(codec_id);
     // avcodec_find_decoder
@@ -44,6 +43,7 @@ void add_stream(AVStream *st, AVFormatContext *oc, AVCodec **codec, enum AVCodec
         fprintf(stderr, "Could not allocate stream\n");
         exit(1);
     }
+    printf("add_stream codec_id:%d nb_streams:%ld\n", codec_id, oc->nb_streams);
     st->id = oc->nb_streams-1;
     c = st->codec;
 
@@ -90,7 +90,6 @@ int main(int argc,char **argv) {
 
     int ret;
     AVFormatContext *in_fmt_ctx = NULL;
-
 #ifdef VIDEO_MODE
     int             video_idx = -1;
     // AVStream      *video_stream = NULL;
@@ -105,42 +104,40 @@ int main(int argc,char **argv) {
     AVCodecContext  *tmp_codec_ctx = NULL;
     char            audio_outbuf[1024*1024];
 #endif
-
     int             end_of_stream = 0;
     int             got_audio_frame = 0;
     AVFrame         *frame = NULL;
     AVPacket        pkt;
-
-    // 输出相关定义
-    AVFormatContext *out_fmt_ctx = NULL;
-
+    
+    // IN init  
     av_register_all();
     avformat_network_init();
-    // open file
+    //IN open file
     if (avformat_open_input(&in_fmt_ctx, input_file, NULL, NULL)!=0) {
         fprintf(stderr, "Could not open source file %s\n", input_file);
         exit(-1);
     }
-    /* retrieve stream information */
+    // IN retrieve stream information
     if (avformat_find_stream_info(in_fmt_ctx, NULL) < 0) {
         fprintf(stderr, "Could not find stream information\n");
         exit(1);
     }
-
     printf("input file format:\n");
     av_dump_format(in_fmt_ctx, 0, input_file, 0);
 
 #ifdef VIDEO_MODE
     video_idx = av_find_best_stream(in_fmt_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
     video_codec_ctx = in_fmt_ctx->streams[video_idx]->codec;
-    printf("video_stream codec_ctx:%p codec_id:%d\n", video_codec_ctx, video_codec_ctx->codec_id);
+    printf("video_stream AVMEDIA_TYPE_VIDEO:%p codec_id:%d\n", AVMEDIA_TYPE_VIDEO, video_codec_ctx->codec_id);
     video_codec = avcodec_find_decoder(video_codec_ctx->codec_id);
 #endif
 
 #ifdef AUDIO_MODE
+    // IN find audio stream 
     audio_idx = av_find_best_stream(in_fmt_ctx, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
     audio_codec_ctx = in_fmt_ctx->streams[audio_idx]->codec;
-    printf("audio_stream codec_ctx:%p codec_id:%d\n", audio_codec_ctx, audio_codec_ctx->codec_id);
+    printf("audio_stream AVMEDIA_TYPE_AUDIO:%d codec_id:%d\n", AVMEDIA_TYPE_AUDIO, audio_codec_ctx->codec_id);
+    // IN find audio decoder codec
     audio_codec = avcodec_find_decoder(audio_codec_ctx->codec_id);
     if (audio_codec == NULL){
         fprintf(stderr, "Could not find audio codec\n");
@@ -159,43 +156,45 @@ int main(int argc,char **argv) {
         exit(-1);
     }
     */
+    // IN open audio decoder codec
     ret = avcodec_open2(audio_codec_ctx, audio_codec, NULL);
     if (ret < 0) {
         fprintf(stderr, "Could not avcodec_open2\n");
         exit(-1);
     }
-
+    /*
     SwrContext *swr_ctx = NULL;
     swr_ctx = swr_alloc();
     if (swr_ctx == NULL) {
         exit(-1);
-    }
+    }*/
 
     // allocate the output media context
+    // 输出相关定义
+    AVFormatContext         *out_fmt_ctx = NULL;
     AVOutputFormat          *out_fmt = NULL;
-    AVStream                *out_audio_st;
+    AVStream                *out_audio_st = NULL;
+    // OUT alloc AVFormatContent 
     ret = avformat_alloc_output_context2(&out_fmt_ctx, NULL, NULL, output_file);
     if (!out_fmt_ctx) {
         fprintf(stderr, "Could not avformat_alloc_output_context2\n");
         exit(-1);
     }
     out_fmt = out_fmt_ctx->oformat;
-    out_audio_st = NULL;
-
-    // open the output file, if needed
+    
+    // OUT open the output file, if needed
     if (!(out_fmt->flags & AVFMT_NOFILE)) {
         if (avio_open(&out_fmt_ctx->pb, output_file, AVIO_FLAG_WRITE) < 0) {
-            printf("Could not open '%s'\n", output_file);
+            fprintf(stderr, "Error: Could not open '%s'\n", output_file);
             exit(-1);
         }
     }
-
+    
     AVCodec *t_out_audio_codec = NULL;
-    printf("########################################\n") ;
-    printf("codec_id:%d AV_CODEC_ID_MP3:%d AV_CODEC_ID_AAC:%d\n", audio_codec_ctx->codec_id, AV_CODEC_ID_MP3, AV_CODEC_ID_AAC);
-    printf("sample_fmt:%d\n", audio_codec_ctx->sample_fmt);
+    //printf("codec_id:%d AV_CODEC_ID_MP3:%d AV_CODEC_ID_AAC:%d\n", audio_codec_ctx->codec_id, AV_CODEC_ID_MP3, AV_CODEC_ID_AAC);
+    //printf("sample_fmt:%d\n", audio_codec_ctx->sample_fmt);
     out_fmt->audio_codec = AV_CODEC_ID_MP3;
-//    out_fmt->audio_codec = AV_CODEC_ID_AAC;
+    //out_fmt->audio_codec = AV_CODEC_ID_AAC;
     if (out_fmt->audio_codec != AV_CODEC_ID_NONE) {
         add_stream(out_audio_st, out_fmt_ctx, &t_out_audio_codec, out_fmt->audio_codec);
     }
@@ -226,6 +225,7 @@ int main(int argc,char **argv) {
         if (pkt.stream_index == audio_idx) {
             // write_audio_frame(out_fmt_ctx, out_audio_st);
 //            ret = av_interleaved_write_frame(out_fmt_ctx, &pkt);
+            pkt.stream_index = 0;
             ret = av_write_frame(out_fmt_ctx, &pkt);
             if (ret < 0){
                 fprintf(stderr, "Error while writing audio frame");
@@ -262,9 +262,10 @@ int main(int argc,char **argv) {
     }
     */
 #ifdef AUDIO_MODE
+    /*
     if (swr_ctx) {
         swr_free(&swr_ctx);
-    }
+    }*/
 #endif
 
     return 0;
