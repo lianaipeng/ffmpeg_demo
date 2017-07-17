@@ -49,8 +49,9 @@ void add_stream(AVStream *st, AVFormatContext *oc, AVCodec **codec, enum AVCodec
 
     switch ((*codec)->type) {
         case AVMEDIA_TYPE_AUDIO:
-            c->sample_fmt   = AV_SAMPLE_FMT_FLTP;
-            c->bit_rate     = 64000;
+            //c->sample_fmt   = AV_SAMPLE_FMT_FLTP;
+            c->sample_fmt   = AV_SAMPLE_FMT_S16P;
+            c->bit_rate     = 128000;
             c->sample_rate  = 44100;
             c->channels     = 2;
             break;
