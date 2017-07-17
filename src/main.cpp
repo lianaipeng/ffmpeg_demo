@@ -83,7 +83,7 @@ void add_stream(AVStream *st, AVFormatContext *oc, AVCodec **codec, enum AVCodec
 
 int main(int argc,char **argv) {
     const char *input_file = "wocao";
-    const char *output_file = "wocao.wav";
+    const char *output_file = "wocao.mp3";
     input_file = argv[1];
     printf("############### %s\n", input_file);
 
@@ -169,20 +169,17 @@ int main(int argc,char **argv) {
     if (swr_ctx == NULL) {
         exit(-1);
     }
-    printf("########################################\n") ;
 
     // allocate the output media context
-    AVOutputFormat  *out_fmt = NULL;
-    AVStream        *out_audio_st; //, *out_video_stream;
+    AVOutputFormat          *out_fmt = NULL;
+    AVStream                *out_audio_st;
     ret = avformat_alloc_output_context2(&out_fmt_ctx, NULL, NULL, output_file);
     if (!out_fmt_ctx) {
         fprintf(stderr, "Could not avformat_alloc_output_context2\n");
         exit(-1);
     }
-
     out_fmt = out_fmt_ctx->oformat;
     out_audio_st = NULL;
-    // out_vedio_stream = NULL;
 
     // open the output file, if needed
     if (!(out_fmt->flags & AVFMT_NOFILE)) {
@@ -196,12 +193,11 @@ int main(int argc,char **argv) {
     printf("########################################\n") ;
     printf("codec_id:%d AV_CODEC_ID_MP3:%d AV_CODEC_ID_AAC:%d\n", audio_codec_ctx->codec_id, AV_CODEC_ID_MP3, AV_CODEC_ID_AAC);
     printf("sample_fmt:%d\n", audio_codec_ctx->sample_fmt);
-    //out_fmt->audio_codec = AV_CODEC_ID_MP3;
-    out_fmt->audio_codec = AV_CODEC_ID_AAC;
+    out_fmt->audio_codec = AV_CODEC_ID_MP3;
+//    out_fmt->audio_codec = AV_CODEC_ID_AAC;
     if (out_fmt->audio_codec != AV_CODEC_ID_NONE) {
         add_stream(out_audio_st, out_fmt_ctx, &t_out_audio_codec, out_fmt->audio_codec);
     }
-    printf("########################################\n") ;
 
     // Write the stream header, if any.
     ret = avformat_write_header(out_fmt_ctx, NULL);
