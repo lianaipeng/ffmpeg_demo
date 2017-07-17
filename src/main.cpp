@@ -225,11 +225,13 @@ int main(int argc,char **argv) {
 #ifdef AUDIO_MODE
         if (pkt.stream_index == audio_idx) {
             // write_audio_frame(out_fmt_ctx, out_audio_st);
-            ret = av_interleaved_write_frame(out_fmt_ctx, &pkt);
+//            ret = av_interleaved_write_frame(out_fmt_ctx, &pkt);
+            ret = av_write_frame(out_fmt_ctx, &pkt);
             if (ret < 0){
                 fprintf(stderr, "Error while writing audio frame");
                 exit(1);
             }
+
             /*
             avcodec_decode_audio4(audio_codec_ctx, frame, &got_audio_frame, &pkt);
 
